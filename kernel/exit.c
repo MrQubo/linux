@@ -497,6 +497,8 @@ static void exit_mm(void)
 	struct mm_struct *mm = current->mm;
 	struct core_state *core_state;
 
+	soczewka_invigilate_wholemm();
+
 	mm_release(current, mm);
 	if (!mm)
 		return;

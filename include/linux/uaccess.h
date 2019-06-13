@@ -6,6 +6,8 @@
 #include <linux/thread_info.h>
 #include <linux/kasan-checks.h>
 
+#include <soczewka/invigilation.h>
+
 #define VERIFY_READ 0
 #define VERIFY_WRITE 1
 
@@ -145,6 +147,7 @@ copy_from_user(void *to, const void __user *from, unsigned long n)
 {
 	if (likely(check_copy_size(to, n, false)))
 		n = _copy_from_user(to, from, n);
+	soczewka_invigilate(from, n);
 	return n;
 }
 
@@ -153,6 +156,7 @@ copy_to_user(void __user *to, const void *from, unsigned long n)
 {
 	if (likely(check_copy_size(from, n, true)))
 		n = _copy_to_user(to, from, n);
+	soczewka_invigilate(to, n);
 	return n;
 }
 #ifdef CONFIG_COMPAT

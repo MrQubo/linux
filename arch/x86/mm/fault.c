@@ -418,7 +418,7 @@ NOKPROBE_SYMBOL(vmalloc_fault);
 
 #ifdef CONFIG_CPU_SUP_AMD
 static const char errata93_warning[] =
-KERN_ERR 
+KERN_ERR
 "******* Your BIOS seems to not contain a fix for K8 errata #93\n"
 "******* Working around it, but it may cause SEGVs or burn power.\n"
 "******* Please consider a BIOS update.\n"
@@ -855,7 +855,9 @@ __bad_area(struct pt_regs *regs, unsigned long error_code,
 	 * Something tried to access memory that isn't in our memory map..
 	 * Fix it, but check if it's kernel or user first..
 	 */
-	up_read(&mm->mmap_sem);
+	/* XXX: Probably should use nested locks but dunno how to use them. */
+	if (!current->soczewka._do_user_addr_fault_holds_lock)
+		up_read(&mm->mmap_sem);
 
 	__bad_area_nosemaphore(regs, error_code, address, pkey, si_code);
 }
@@ -1224,6 +1226,7 @@ do_kern_addr_fault(struct pt_regs *regs, unsigned long hw_error_code,
 }
 NOKPROBE_SYMBOL(do_kern_addr_fault);
 
+
 /* Handle faults in the user portion of the address space */
 static inline
 void do_user_addr_fault(struct pt_regs *regs,
@@ -1348,7 +1351,9 @@ void do_user_addr_fault(struct pt_regs *regs,
 	 *    hardware or earlier page fault code may set X86_PF_USER
 	 *    in sw_error_code.
 	 */
-	if (unlikely(!down_read_trylock(&mm->mmap_sem))) {
+	if (!current->soczewka._do_user_addr_fault_holds_lock
+			&& unlikely(!down_read_trylock(&mm->mmap_sem))
+	) {
 		if (!(sw_error_code & X86_PF_USER) &&
 		    !search_exception_tables(regs->ip)) {
 			/*
@@ -1359,7 +1364,11 @@ void do_user_addr_fault(struct pt_regs *regs,
 			return;
 		}
 retry:
-		down_read(&mm->mmap_sem);
+		/* XXX: Probably should use nested locks but dunno how to use
+		 * them.
+		 */
+		if (!current->soczewka._do_user_addr_fault_holds_lock)
+			down_read(&mm->mmap_sem);
 	} else {
 		/*
 		 * The above down_read_trylock() might have succeeded in
@@ -1446,7 +1455,9 @@ good_area:
 		return;
 	}
 
-	up_read(&mm->mmap_sem);
+	/* XXX: Probably should use nested locks but dunno how to use them. */
+	if (!current->soczewka._do_user_addr_fault_holds_lock)
+		up_read(&mm->mmap_sem);
 	if (unlikely(fault & VM_FAULT_ERROR)) {
 		mm_fault_error(regs, sw_error_code, address, fault);
 		return;

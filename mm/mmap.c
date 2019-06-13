@@ -51,6 +51,8 @@
 #include <asm/tlb.h>
 #include <asm/mmu_context.h>
 
+#include <soczewka/invigilation.h>
+
 #include "internal.h"
 
 #ifndef arch_mmap_check
@@ -199,8 +201,34 @@ SYSCALL_DEFINE1(brk, unsigned long, brk)
 	bool downgraded = false;
 	LIST_HEAD(uf);
 
+	newbrk = PAGE_ALIGN(brk);
+	oldbrk = PAGE_ALIGN(mm->brk);
+
+	/* if (oldbrk > newbrk)
+	 *         soczewka_invigilate((void __user *)newbrk, oldbrk - newbrk); */
+
+/*         for (;;) {
+ *                 if (down_read_killable(&mm->mmap_sem))
+ *                         return -EINTR;
+ *
+ *                 newbrk = PAGE_ALIGN(brk);
+ *                 oldbrk = PAGE_ALIGN(mm->brk);
+ *
+ *                 if (oldbrk > newbrk)
+ *                         soczewka_invigilate((void __user *)newbrk, oldbrk - newbrk);
+ *
+ *                 up_read(&mm->mmap_sem);
+ *                 if (down_write_killable(&mm->mmap_sem))
+ *                         return -EINTR;
+ *
+ *                 if (PAGE_ALIGN(mm->brk) == oldbrk)
+ *                         break;
+ *                 else
+ *                         up_write(&mm->mmap_sem);
+ *         } */
+
 	if (down_write_killable(&mm->mmap_sem))
-		return -EINTR;
+	        return -EINTR;
 
 	origbrk = mm->brk;
 
@@ -2830,6 +2858,9 @@ static int __vm_munmap(unsigned long start, size_t len, bool downgrade)
 	int ret;
 	struct mm_struct *mm = current->mm;
 	LIST_HEAD(uf);
+
+	if (soczewka_invigilate_killable((void __user *)start, len))
+		return -EINTR;
 
 	if (down_write_killable(&mm->mmap_sem))
 		return -EINTR;

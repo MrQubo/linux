@@ -30,6 +30,8 @@
 #include <linux/task_io_accounting.h>
 #include <linux/rseq.h>
 
+#include <soczewka/soczewka.h>
+
 /* task_struct member predeclarations (sorted alphabetically): */
 struct audit_context;
 struct backing_dev_info;
@@ -1204,6 +1206,10 @@ struct task_struct {
 #ifdef CONFIG_GCC_PLUGIN_STACKLEAK
 	unsigned long			lowest_stack;
 	unsigned long			prev_lowest_stack;
+#endif
+
+#ifdef CONFIG_SOCZEWKA
+	struct soczewka			soczewka;
 #endif
 
 	/*

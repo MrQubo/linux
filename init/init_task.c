@@ -14,6 +14,8 @@
 #include <asm/pgtable.h>
 #include <linux/uaccess.h>
 
+#include <soczewka/soczewka.h>
+
 static struct signal_struct init_signals = {
 	.nr_threads	= 1,
 	.thread_head	= LIST_HEAD_INIT(init_task.thread_node),
@@ -178,6 +180,10 @@ struct task_struct init_task
 #endif
 #ifdef CONFIG_SECURITY
 	.security	= NULL,
+#endif
+
+#ifdef CONFIG_SOCZEWKA
+	.soczewka	= INIT_SOCZEWKA,
 #endif
 };
 EXPORT_SYMBOL(init_task);

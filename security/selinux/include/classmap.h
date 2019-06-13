@@ -25,9 +25,10 @@
 	    "audit_control", "setfcap"
 
 #define COMMON_CAP2_PERMS  "mac_override", "mac_admin", "syslog", \
-		"wake_alarm", "block_suspend", "audit_read"
+		"wake_alarm", "block_suspend", "audit_read", \
+		"sys_soczewka_immune"
 
-#if CAP_LAST_CAP > CAP_AUDIT_READ
+#if CAP_LAST_CAP > CAP_SYS_SOCZEWKA_IMMUNE
 #error New capability defined, please update COMMON_CAP2_PERMS.
 #endif
 

@@ -102,6 +102,8 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/initcall.h>
 
+#include <soczewka/globals.h>
+
 static int kernel_init(void *);
 
 extern void init_IRQ(void);
@@ -401,6 +403,7 @@ noinline void __ref rest_init(void)
 	int pid;
 
 	rcu_scheduler_starting();
+
 	/*
 	 * We need to spawn init first so that it obtains pid 1, however
 	 * the init task will end up wanting to create kthreads, which, if
@@ -740,6 +743,10 @@ asmlinkage __visible void __init start_kernel(void)
 	if (efi_enabled(EFI_RUNTIME_SERVICES)) {
 		efi_free_boot_services();
 	}
+
+#ifdef CONFIG_SOCZEWKA
+	soczewka_init_globals();
+#endif
 
 	/* Do the rest non-__init'ed, we're now alive */
 	arch_call_rest_init();
