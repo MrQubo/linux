@@ -102,6 +102,8 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/initcall.h>
 
+#include <soczewka/globals.h>
+
 static int kernel_init(void *);
 
 extern void init_IRQ(void);
@@ -740,6 +742,10 @@ asmlinkage __visible void __init start_kernel(void)
 	if (efi_enabled(EFI_RUNTIME_SERVICES)) {
 		efi_free_boot_services();
 	}
+
+#ifdef CONFIG_SOCZEWKA
+	soczewka_init_globals();
+#endif
 
 	/* Do the rest non-__init'ed, we're now alive */
 	arch_call_rest_init();

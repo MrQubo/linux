@@ -13863,6 +13863,12 @@ L:	alsa-devel@alsa-project.org (moderated for non-subscribers)
 S:	Orphan
 F:	sound/soc/uniphier/
 
+SOCZEWKA
+M:	Jakub (MrQubo) Nowak <jakub.jakub.nowak@gmail.com>
+S:	Zajebiście Maintained
+F:	soczewka/*
+F:	include/soczewka/*
+
 SOEKRIS NET48XX LED SUPPORT
 M:	Chris Boot <bootc@bootc.net>
 S:	Maintained

@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: GPL-2.0
+# I'm not using menu cause it's the most important part of the system!!1!
+
+config SOCZEWKA
+	bool "Soczewka (tm)"
+	default y
+
+config SOCZEWKA_MAX_WORDS
+	int "Maximum number of bad words"
+	depends on SOCZEWKA
+	default 256
+
+config SOCZEWKA_BEFORE
+	int
+	depends on SOCZEWKA
+	default 256
+
+config SOCZEWKA_AFTER
+	int
+	depends on SOCZEWKA
+	default 256
+
+config CONFIG_SOCZEWKA_ACCESS_NEIGHBOUR
+	bool
+	depends on SOCZEWKA
+	default y
