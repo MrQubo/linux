@@ -44,6 +44,19 @@
 #include <asm/param.h>
 #include <asm/page.h>
 
+#include <linux/fdtable.h>
+#include <linux/net.h>
+#include <linux/spinlock.h>
+
+// here be dragons
+#ifdef ns_to_timeval
+#	undef ns_to_timeval
+#	include <net/sock.h>
+#	define ns_to_timeval ns_to_old_timeval32
+#else
+#	include <net/sock.h>
+#endif
+
 #ifndef user_long_t
 #define user_long_t long
 #endif
@@ -236,7 +249,7 @@ create_elf_tables(struct linux_binprm *bprm, struct elfhdr *exec,
 	} while (0)
 
 #ifdef ARCH_DLINFO
-	/* 
+	/*
 	 * ARCH_DLINFO must come first so PPC can do its special alignment of
 	 * AUXV.
 	 * update AT_VECTOR_SIZE_ARCH if the number of NEW_AUX_ENT() in
@@ -716,7 +729,7 @@ static int load_elf_binary(struct linux_binprm *bprm)
 		retval = -ENOMEM;
 		goto out_ret;
 	}
-	
+
 	/* Get the exec-header */
 	loc->elf_ex = *((struct elfhdr *)bprm->buf);
 
@@ -754,7 +767,7 @@ static int load_elf_binary(struct linux_binprm *bprm)
 			 * is an a.out format binary
 			 */
 			retval = -ENOEXEC;
-			if (elf_ppnt->p_filesz > PATH_MAX || 
+			if (elf_ppnt->p_filesz > PATH_MAX ||
 			    elf_ppnt->p_filesz < 2)
 				goto out_free_ph;
 
@@ -888,7 +901,7 @@ static int load_elf_binary(struct linux_binprm *bprm)
 				 executable_stack);
 	if (retval < 0)
 		goto out_free_dentry;
-	
+
 	current->mm->start_stack = bprm->p;
 
 	/* Now we do a little grungy work by mmapping the ELF image into
@@ -904,7 +917,7 @@ static int load_elf_binary(struct linux_binprm *bprm)
 
 		if (unlikely (elf_brk > elf_bss)) {
 			unsigned long nbyte;
-	            
+
 			/* There was a PT_LOAD segment with p_memsz > p_filesz
 			   before this one. Map anonymous pages, if needed,
 			   and clear the area.  */
@@ -1478,7 +1491,7 @@ static void fill_elf_note_phdr(struct elf_phdr *phdr, int sz, loff_t offset)
 	return;
 }
 
-static void fill_note(struct memelfnote *note, const char *name, int type, 
+static void fill_note(struct memelfnote *note, const char *name, int type,
 		unsigned int sz, void *data)
 {
 	note->name = name;
@@ -1531,7 +1544,7 @@ static int fill_psinfo(struct elf_prpsinfo *psinfo, struct task_struct *p,
 {
 	const struct cred *cred;
 	unsigned int i, len;
-	
+
 	/* first copy the parameters from user space */
 	memset(psinfo, 0, sizeof(struct elf_prpsinfo));
 
@@ -1565,7 +1578,7 @@ static int fill_psinfo(struct elf_prpsinfo *psinfo, struct task_struct *p,
 	SET_GID(psinfo->pr_gid, from_kgid_munged(cred->user_ns, cred->gid));
 	rcu_read_unlock();
 	strncpy(psinfo->pr_fname, p->comm, sizeof(psinfo->pr_fname));
-	
+
 	return 0;
 }
 
@@ -1678,6 +1691,141 @@ static int fill_files_note(struct memelfnote *note)
 	return 0;
 }
 
+
+#define THREAD_FDS_NUMBER_OF_NOTES 1
+
+static int wypelnij_notatke_efdekow_dla_watku(
+	struct memelfnote * notatka, struct task_struct * zadanie
+) {
+	struct files_struct * pliki;
+	struct fdtable * tablica_efdekow;
+	int zwroc;
+	size_t wielkosc, pozostalo;
+	char * pozycja;
+	unsigned liczba_efdekow, efde;
+	user_long_t * dane;
+
+	pliki = get_files_struct(zadanie);
+	spin_lock(&pliki->file_lock);
+	tablica_efdekow = files_fdtable(pliki);
+
+	zwroc = -EINVAL;
+	if (tablica_efdekow->max_fds > SIZE_MAX / 64)
+		goto blad;
+	wielkosc = (size_t)tablica_efdekow->max_fds * 64;
+
+	if (0)
+	{
+ za_male_dane:
+		kvfree(dane);
+		wielkosc = wielkosc * 3 / 2;
+	}
+
+	zwroc = -ENOMEM;
+	wielkosc = round_up(wielkosc, PAGE_SIZE);
+	dane = kvmalloc(wielkosc, GFP_KERNEL);
+	if (ZERO_OR_NULL_PTR(dane))
+		goto blad;
+
+	liczba_efdekow = 0;
+	pozycja = ((char *)dane) + 4;
+	pozostalo = wielkosc - 4;
+
+	for (efde = 0; efde < tablica_efdekow->max_fds; efde += 1)
+	{
+		struct file * plik;
+		unsigned n, domena = -1, typ = -1;
+		int dlugosc_tutejszego_adresu = 0
+			, dlugosc_odosobnionego_adresu = 0, kod_bledu = 0;
+		struct sockaddr tutejszy_adres, odosobniony_adres;
+		struct socket * skarpeta = NULL;
+		const char * sciezka_pliku;
+
+		plik = rcu_dereference_check_fdtable(pliki, tablica_efdekow->fd[efde]);
+		if (!plik)
+			continue;
+
+		skarpeta = sock_from_file(plik, &kod_bledu);
+		if (kod_bledu)
+		{
+			skarpeta = NULL;
+		}
+		else if (skarpeta)
+		{
+			dlugosc_tutejszego_adresu =
+				kernel_getsockname(skarpeta, &tutejszy_adres);
+			if (dlugosc_tutejszego_adresu < 0)
+				dlugosc_tutejszego_adresu = 0;
+
+			dlugosc_odosobnionego_adresu =
+				kernel_getpeername(skarpeta, &odosobniony_adres);
+			if (dlugosc_odosobnionego_adresu < 0)
+				dlugosc_odosobnionego_adresu = 0;
+
+			domena = skarpeta->sk->sk_family;
+			typ = skarpeta->sk->sk_type;
+		}
+
+		n = 32 + dlugosc_tutejszego_adresu + dlugosc_odosobnionego_adresu;
+		if (pozostalo < n)
+			goto za_male_dane;
+		sciezka_pliku = file_path(plik, pozycja + n, pozostalo - n);
+		if (IS_ERR(sciezka_pliku))
+		{
+			if (PTR_ERR(sciezka_pliku) == -ENAMETOOLONG)
+				goto za_male_dane;
+			continue;
+		}
+
+		*(u32 *)pozycja = efde;
+		pozycja += 4;
+		*(u32 *)pozycja = plik->f_flags;
+		pozycja += 4;
+		*(u64 *)pozycja = plik->f_pos;
+		pozycja += 8;
+		*(u32 *)pozycja = plik->f_mode;
+		pozycja += 4;
+		*(u32 *)pozycja = domena;
+		pozycja += 4;
+		*(u32 *)pozycja = typ;
+		pozycja += 4;
+		*(u16 *)pozycja = dlugosc_tutejszego_adresu;
+		pozycja += 2;
+		*(u16 *)pozycja = dlugosc_odosobnionego_adresu;
+		pozycja += 2;
+		memcpy(pozycja, &tutejszy_adres, dlugosc_tutejszego_adresu);
+		pozycja += dlugosc_tutejszego_adresu;
+		memcpy(pozycja, &odosobniony_adres, dlugosc_odosobnionego_adresu);
+		pozycja += dlugosc_odosobnionego_adresu;
+
+		pozostalo -= n;
+
+		/* file_path() fills at the end, move name down */
+		/* n = strlen(sciezka_pliku) + 1: */
+		n = (pozycja + pozostalo) - sciezka_pliku;
+		pozostalo = sciezka_pliku - pozycja;
+		memmove(pozycja, sciezka_pliku, n);
+		pozycja += n;
+
+		for (; pozostalo % 4; --pozostalo)
+			*(u8 *)pozycja++ = 0;
+
+		liczba_efdekow += 1;
+	}
+
+	*(u32 *)dane = liczba_efdekow;
+
+	fill_note(notatka, "LINUX", NT_FDS, wielkosc - pozostalo, dane);
+
+	zwroc = 0;
+
+ blad:
+	spin_unlock(&pliki->file_lock);
+	put_files_struct(pliki);
+	return zwroc;
+}
+
+
 #ifdef CORE_DUMP_USE_REGSET
 #include <linux/regset.h>
 
@@ -1685,6 +1833,7 @@ struct elf_thread_core_info {
 	struct elf_thread_core_info *next;
 	struct task_struct *task;
 	struct elf_prstatus prstatus;
+	struct memelfnote fds;
 	struct memelfnote notes[0];
 };
 
@@ -1725,6 +1874,7 @@ static int fill_thread_core_info(struct elf_thread_core_info *t,
 {
 	unsigned int i;
 	unsigned int regset0_size = regset_size(t->task, &view->regsets[0]);
+	int notes_idx;
 
 	/*
 	 * NT_PRSTATUS is the one special case, because the regset data
@@ -1741,6 +1891,8 @@ static int fill_thread_core_info(struct elf_thread_core_info *t,
 	*total += notesize(&t->notes[0]);
 
 	do_thread_regset_writeback(t->task, &view->regsets[0]);
+
+	notes_idx = 1;
 
 	/*
 	 * Each other regset might generate a note too.  For each regset
@@ -1763,19 +1915,23 @@ static int fill_thread_core_info(struct elf_thread_core_info *t,
 				kfree(data);
 			else {
 				if (regset->core_note_type != NT_PRFPREG)
-					fill_note(&t->notes[i], "LINUX",
+					fill_note(&t->notes[notes_idx], "LINUX",
 						  regset->core_note_type,
 						  size, data);
 				else {
 					SET_PR_FPVALID(&t->prstatus,
 							1, regset0_size);
-					fill_note(&t->notes[i], "CORE",
+					fill_note(&t->notes[notes_idx], "CORE",
 						  NT_PRFPREG, size, data);
 				}
-				*total += notesize(&t->notes[i]);
+				*total += notesize(&t->notes[notes_idx]);
+				notes_idx += 1;
 			}
 		}
 	}
+
+	if (!wypelnij_notatke_efdekow_dla_watku(&t->fds, t->task))
+		*total += notesize(&t->fds);
 
 	return 1;
 }
@@ -1910,6 +2066,8 @@ static int write_note_info(struct elf_note_info *info,
 			if (t->notes[i].data &&
 			    !writenote(&t->notes[i], cprm))
 				return 0;
+		if (t->fds.data && !writenote(&t->fds, cprm))
+			return 0;
 
 		first = false;
 		t = t->next;
@@ -1928,6 +2086,7 @@ static void free_note_info(struct elf_note_info *info)
 		WARN_ON(t->notes[0].data && t->notes[0].data != &t->prstatus);
 		for (i = 1; i < info->thread_notes; ++i)
 			kfree(t->notes[i].data);
+		kvfree(t->fds.data);
 		kfree(t);
 	}
 	kfree(info->psinfo.data);
@@ -1962,8 +2121,8 @@ static int elf_dump_thread_status(long signr, struct elf_thread_status *t)
 	t->num_notes = 0;
 
 	fill_prstatus(&t->prstatus, p, signr);
-	elf_core_copy_task_regs(p, &t->prstatus.pr_reg);	
-	
+	elf_core_copy_task_regs(p, &t->prstatus.pr_reg);
+
 	fill_note(&t->notes[0], "CORE", NT_PRSTATUS, sizeof(t->prstatus),
 		  &(t->prstatus));
 	t->num_notes++;
@@ -1984,7 +2143,7 @@ static int elf_dump_thread_status(long signr, struct elf_thread_status *t)
 		t->num_notes++;
 		sz += notesize(&t->notes[2]);
 	}
-#endif	
+#endif
 	return sz;
 }
 
@@ -2227,7 +2386,7 @@ static int elf_core_dump(struct coredump_params *cprm)
 
 	/*
 	 * We no longer stop all VM operations.
-	 * 
+	 *
 	 * This is because those proceses that could possibly change map_count
 	 * or the mmap / vma pages are now blocked in do_exit on current
 	 * finishing this core dump.
@@ -2236,7 +2395,7 @@ static int elf_core_dump(struct coredump_params *cprm)
 	 * the map_count or the pages allocated. So no possibility of crashing
 	 * exists while dumping the mm->vm_next areas to the core file.
 	 */
-  
+
 	/* alloc memory for large data structures: too large to be on stack */
 	elf = kmalloc(sizeof(*elf), GFP_KERNEL);
 	if (!elf)
